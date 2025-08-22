@@ -104,7 +104,7 @@ class HorseDetailScraper:
     def extract_basic_info(self, soup: BeautifulSoup, horse_id: str) -> Optional[Dict]:
         """基本情報を抽出"""
         try:
-            horse_data = {'id': int(horse_id)}
+            horse_data = {'id': horse_id}  # int() を削除
             
             # デバッグ: ページタイトル確認
             title = soup.find('title')
@@ -291,7 +291,7 @@ class HorseDetailScraper:
                     href = sire_link.get('href', '')
                     sire_id_match = re.search(r'/horse/ped/([0-9a-zA-Z]+)/', href)
                     if sire_id_match:
-                        pedigree_ids['sire_id'] = int(sire_id_match.group(1))
+                        pedigree_ids['sire_id'] = sire_id_match.group(1)  # int() を削除
                         print(f"    🧬 父ID取得: {pedigree_ids['sire_id']}")
                 
                 # 3行目: 母
@@ -300,7 +300,7 @@ class HorseDetailScraper:
                     href = dam_link.get('href', '')
                     dam_id_match = re.search(r'/horse/ped/([0-9a-zA-Z]+)/', href)
                     if dam_id_match:
-                        pedigree_ids['dam_id'] = int(dam_id_match.group(1))
+                        pedigree_ids['dam_id'] = dam_id_match.group(1)  # int() を削除
                         print(f"    🧬 母ID取得: {pedigree_ids['dam_id']}")
                 
                 # 4行目: 母父
@@ -309,7 +309,7 @@ class HorseDetailScraper:
                     href = bms_link.get('href', '')
                     bms_id_match = re.search(r'/horse/ped/([0-9a-zA-Z]+)/', href)
                     if bms_id_match:
-                        pedigree_ids['maternal_grandsire_id'] = int(bms_id_match.group(1))
+                        pedigree_ids['maternal_grandsire_id'] = bms_id_match.group(1)  # int() を削除
                         print(f"    🧬 母父ID取得: {pedigree_ids['maternal_grandsire_id']}")
             
             return pedigree_ids
@@ -541,8 +541,8 @@ class HorseDetailScraper:
                             
                             if relation_type:
                                 relations.append({
-                                    'horse_a_id': int(related_horse_id),
-                                    'horse_b_id': int(horse_id),
+                                    'horse_a_id': related_horse_id,  # int() を削除
+                                    'horse_b_id': horse_id,         # int() を削除
                                     'relation_type': relation_type,
                                     'children_ids': None  # 単純な親子関係
                                 })
@@ -557,7 +557,7 @@ class HorseDetailScraper:
         pedigree_ids = {}
         
         for relation in relations:
-            if relation['horse_b_id'] == int(horse_id):
+            if relation['horse_b_id'] == horse_id:  # int() を削除
                 if relation['relation_type'] == 'sire_of':
                     pedigree_ids['sire_id'] = relation['horse_a_id']
                     print(f"    🧬 父ID設定: {pedigree_ids['sire_id']}")
@@ -776,8 +776,8 @@ class HorseDetailScraper:
 if __name__ == "__main__":
     scraper = HorseDetailScraper()
     
-    # テスト実行（イクイノックス）
-    test_horse_id = "2019105219"
+    # テスト実行
+    test_horse_id = "2022105102"
     success = scraper.scrape_horse_complete(test_horse_id)
     
     if success:
