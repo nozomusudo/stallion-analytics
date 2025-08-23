@@ -14,6 +14,51 @@ tree -I 'node_modules|venv|.git'
 tree -I 'node_modules|venv|.git|.next|dist|build' -L 4
 
 
+---
+
+### 20250823 ml
+
+(venv) skdata_mng@N-SUDO ml-analysis % tree -I 'node_modules|venv|.git|.next|dist|build' -L 4
+.
+├── data
+│   ├── processed
+│   └── raw
+│       ├── g1_horses_sample_20250822_194846.csv
+│       └── g1_horses_sample_20250822_194846.json
+├── notebooks
+│   └── 01_g1_data_collection.ipynb
+├── outputs
+├── requirements.txt
+└── src
+    ├── database
+    │   └── supabase_client.py
+    └── scraping
+        ├── __init__.py
+        ├── __pycache__
+        │   ├── horse_detail_scraper.cpython-313.pyc
+        │   └── horse_list_scraper.cpython-313.pyc
+        ├── extractors
+        │   └── horse
+        ├── horse_detail_scraper.py
+        ├── horse_list_scraper.py
+        ├── parsers
+        │   ├── __pycache__
+        │   └── field_parser.py
+        ├── scrapers
+        │   ├── __pycache__
+        │   ├── base_scraper.py
+        │   └── horse_scraper.py
+        ├── storage
+        │   ├── __pycache__
+        │   └── supabase_storage.py
+        └── utils
+            ├── __pycache__
+            └── constants.py
+
+
+
+
+
 
 ---
 
@@ -74,3 +119,5 @@ tree -I 'node_modules|venv|.git|.next|dist|build' -L 4
         │   ├── types
         │   └── utils
         └── tsconfig.json
+
+
