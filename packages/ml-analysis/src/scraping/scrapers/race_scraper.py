@@ -330,8 +330,8 @@ if __name__ == "__main__":
     # テスト: 2024年G1レースリストを取得（実際のスクレイピングは行わない）
     print("=== Testing Race List Extraction ===")
     race_list = scraper.scrape_race_list_by_conditions(
-        start_year=2023,
-        end_year=2024,
+        start_year=2010,
+        end_year=2012,
         grades=['1'],
         limit=20
     )

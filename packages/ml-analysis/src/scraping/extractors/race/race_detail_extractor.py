@@ -18,9 +18,6 @@ logger = logging.getLogger(__name__)
 class RaceDetailExtractor:
     """レース詳細ページからレース情報と結果を抽出するクラス"""
     
-    def __init__(self):
-        pass
-    
     def extract_race_detail(self, html: str, race_id: str) -> Optional[Tuple[Race, List[RaceResult]]]:
         """
         レース詳細ページのHTMLからレース情報と結果を抽出
@@ -32,7 +29,6 @@ class RaceDetailExtractor:
         Returns:
             Tuple[Race, List[RaceResult]]: レース基本情報と結果のタプル
         """
-        
         try:
             soup = BeautifulSoup(html, 'html.parser')
             
@@ -57,33 +53,34 @@ class RaceDetailExtractor:
     
     def _extract_race_info(self, soup: BeautifulSoup, race_id: str) -> Optional[Race]:
         """レース基本情報を抽出"""
-        
         try:
-            # レース名を取得 - <h1>要素から
-            race_name_elem = soup.find('h1')
-            if not race_name_elem:
-                logger.error(f"Race name not found for {race_id}")
-                return None
-            
-            race_name = race_name_elem.text.strip()
-            grade = self._extract_grade_from_name(race_name)
-            
-            # レース条件を取得 - racedata要素から
-            racedata_elem = soup.find('dl', class_='racedata')
-            if not racedata_elem:
+            # レース名とレース番号を取得 (dl.racedata.fc)
+            race_data_dl = soup.find('dl', class_='racedata fc')
+            if not race_data_dl:
                 logger.error(f"Race data section not found for {race_id}")
                 return None
             
-            # 距離、コース、天候、馬場状態を抽出
-            race_conditions = self._extract_race_conditions(racedata_elem)
+            # レース名 (h1)
+            race_name_h1 = race_data_dl.find('h1')
+            if not race_name_h1:
+                logger.error(f"Race name not found for {race_id}")
+                return None
+            race_name = race_name_h1.text.strip()
             
-            # レース番号を取得
-            race_number = self._extract_race_number(soup)
+            # レース番号 (dt)
+            race_number_dt = race_data_dl.find('dt')
+            race_number = self._extract_race_number(race_number_dt.text.strip()) if race_number_dt else 1
             
-            # 開催情報を取得
+            # グレードを抽出
+            grade = self._extract_grade_from_name(race_name)
+            
+            # レース条件を抽出 (レース詳細情報のpタグから)
+            race_conditions = self._extract_race_conditions(race_data_dl)
+            
+            # 開催情報を抽出 (p.smalltxt)
             venue_info = self._extract_venue_info(soup)
             
-            # レース詳細情報を取得
+            # 結果テーブルから追加情報を抽出
             additional_info = self._extract_additional_race_info(soup)
             
             # Raceオブジェクトを構築
@@ -91,7 +88,7 @@ class RaceDetailExtractor:
                 race_id=race_id,
                 race_date=venue_info.get('race_date') or date.today(),
                 track_name=venue_info.get('track_name', ''),
-                race_number=race_number or 1,
+                race_number=race_number,
                 race_name=race_name,
                 grade=grade,
                 distance=race_conditions.get('distance', 0),
@@ -106,6 +103,8 @@ class RaceDetailExtractor:
                 race_class=additional_info.get('race_class'),
                 race_conditions=additional_info.get('race_conditions')
             )
+
+            # logger.info(f"RACE: {race}")
             
             return race
             
@@ -115,19 +114,18 @@ class RaceDetailExtractor:
     
     def _extract_race_results(self, soup: BeautifulSoup, race_id: str) -> List[RaceResult]:
         """レース結果を抽出"""
-        
         results = []
         
         try:
-            # 結果テーブルを探す
-            result_table = soup.find('table')  # 最初のテーブルが結果テーブルと仮定
+            # 結果テーブルを取得 (table.race_table_01)
+            result_table = soup.find('table', class_='race_table_01')
             
             if not result_table:
                 logger.warning(f"Result table not found for {race_id}")
                 return results
             
             # テーブルの行を取得（ヘッダー行は除く）
-            rows = result_table.find('tbody').find_all('tr') if result_table.find('tbody') else result_table.find_all('tr')[1:]
+            rows = result_table.find_all('tr')[1:]
             
             for row in rows:
                 try:
@@ -139,6 +137,7 @@ class RaceDetailExtractor:
                     continue
             
             logger.info(f"Extracted {len(results)} race results for {race_id}")
+            # logger.info(f"First 3 results: {results[:3]}")
             return results
             
         except Exception as e:
@@ -147,24 +146,23 @@ class RaceDetailExtractor:
     
     def _extract_race_result_row(self, row, race_id: str) -> Optional[RaceResult]:
         """単一の結果行からRaceResultを抽出"""
-        
         try:
             cells = row.find_all('td')
             
             if len(cells) < 15:  # 最低限必要なセル数
                 return None
             
-            # 各セルからデータを抽出
+            # 基本情報
             finish_position = self._parse_int(cells[0].text.strip())
             bracket_number = self._parse_int(cells[1].text.strip())
             horse_number = self._parse_int(cells[2].text.strip())
             
-            # 馬名とID
+            # 馬情報
             horse_elem = cells[3].find('a')
             horse_name = horse_elem.text.strip() if horse_elem else cells[3].text.strip()
-            horse_id = self._extract_horse_id(horse_elem.get('href', '')) if horse_elem else None
+            horse_id = self._extract_id_from_url(horse_elem.get('href', ''), 'horse') if horse_elem else None
             
-            # 性齢 - "牝3"のような形式
+            # 性齢
             sex_age = cells[4].text.strip()
             sex, age = self._parse_sex_age(sex_age)
             
@@ -174,60 +172,31 @@ class RaceDetailExtractor:
             # 騎手
             jockey_elem = cells[6].find('a')
             jockey_name = jockey_elem.text.strip() if jockey_elem else cells[6].text.strip()
-            jockey_id = self._extract_jockey_id(jockey_elem.get('href', '')) if jockey_elem else None
+            jockey_id = self._extract_id_from_url(jockey_elem.get('href', ''), 'jockey') if jockey_elem else None
             
-            # タイム
+            # レース結果
             race_time = cells[7].text.strip()
-            
-            # 着差
             time_diff = cells[8].text.strip()
             
-            # 通過順位（存在する場合）
+            # 通過順位、上り3ハロン
             passing_order = cells[10].text.strip() if len(cells) > 10 else None
-            
-            # 上り3ハロン
             last_3f = self._parse_decimal(cells[11].text.strip()) if len(cells) > 11 else None
             
-            # 単勝オッズ
+            # オッズ・人気
             odds = self._parse_decimal(cells[12].text.strip()) if len(cells) > 12 else None
-            
-            # 人気
             popularity = self._parse_int(cells[13].text.strip()) if len(cells) > 13 else None
             
-            # 馬体重 - "474(+4)"のような形式
-            horse_weight_info = self._parse_horse_weight(cells[14].text.strip()) if len(cells) > 14 else (None, None)
-            horse_weight, weight_change = horse_weight_info
+            # 馬体重
+            horse_weight, weight_change = self._parse_horse_weight(cells[14].text.strip()) if len(cells) > 14 else (None, None)
             
-            # 調教師情報
-            trainer_name = ""
-            trainer_region = None
-            trainer_id = None
-            if len(cells) > 18:
-                trainer_cell = cells[18]
-                trainer_elem = trainer_cell.find('a')
-                if trainer_elem:
-                    trainer_name = trainer_elem.text.strip()
-                    trainer_id = self._extract_trainer_id(trainer_elem.get('href', ''))
-                
-                # 地域を抽出 - [西]や[東]
-                region_match = re.search(r'\[(東|西)\]', trainer_cell.text)
-                if region_match:
-                    trainer_region = region_match.group(1)
+            # 調教師（西部、東部の表記も含む）
+            trainer_name, trainer_region, trainer_id = self._extract_trainer_info(cells, 18)
             
             # 馬主
-            owner_name = ""
-            owner_id = None
-            if len(cells) > 19:
-                owner_cell = cells[19]
-                owner_elem = owner_cell.find('a')
-                if owner_elem:
-                    owner_name = owner_elem.text.strip()
-                    owner_id = self._extract_owner_id(owner_elem.get('href', ''))
+            owner_name, owner_id = self._extract_owner_info(cells, 19)
             
             # 賞金
-            prize_money = None
-            if len(cells) > 20:
-                prize_money = self._parse_decimal(cells[20].text.strip())
+            prize_money = self._parse_decimal(cells[20].text.strip()) if len(cells) > 20 else None
             
             # RaceResultオブジェクトを構築
             result = RaceResult(
@@ -264,6 +233,8 @@ class RaceDetailExtractor:
             logger.warning(f"Error extracting race result row: {str(e)}")
             return None
     
+    # === 抽出ヘルパーメソッド ===
+    
     def _extract_grade_from_name(self, race_name: str) -> Optional[str]:
         """レース名からグレードを抽出"""
         if '(GI)' in race_name or '(G1)' in race_name:
@@ -275,15 +246,14 @@ class RaceDetailExtractor:
         return None
     
     def _extract_race_conditions(self, racedata_elem) -> Dict[str, Any]:
-        """レース条件を抽出"""
+        """レース条件を抽出（距離、コース、天候、馬場状態、発走時刻）"""
         conditions = {}
         
         try:
-            # レース条件のテキストを取得
             condition_text = racedata_elem.get_text()
             
-            # 距離とコース種別を抽出 - "芝左2400m"のような形式
-            distance_match = re.search(r'(芝|ダート?)([左右直線]*?)(\d+)m', condition_text)
+            # 距離とコース種別 - "芝右 外1600m"のような形式
+            distance_match = re.search(r'(芝|ダート?)([左右直線]*?)\s*(?:外|内)?(\d+)m', condition_text)
             if distance_match:
                 track_type = distance_match.group(1)
                 if track_type.startswith('ダ'):
@@ -292,17 +262,17 @@ class RaceDetailExtractor:
                 conditions['track_direction'] = distance_match.group(2) or None
                 conditions['distance'] = int(distance_match.group(3))
             
-            # 天候を抽出 - "天候 : 曇"
+            # 天候 - "天候 : 曇"
             weather_match = re.search(r'天候\s*[:：]\s*([^\s/&]+)', condition_text)
             if weather_match:
                 conditions['weather'] = weather_match.group(1).strip()
             
-            # 馬場状態を抽出 - "芝 : 良" 
+            # 馬場状態 - "芝 : 良"
             track_condition_match = re.search(r'(芝|ダート?)\s*[:：]\s*([^\s/&]+)', condition_text)
             if track_condition_match:
                 conditions['track_condition'] = track_condition_match.group(2).strip()
             
-            # 発走時刻を抽出 - "発走 : 15:40"
+            # 発走時刻 - "発走 : 15:40"
             time_match = re.search(r'発走\s*[:：]\s*(\d{1,2}):(\d{2})', condition_text)
             if time_match:
                 hour = int(time_match.group(1))
@@ -314,26 +284,22 @@ class RaceDetailExtractor:
         
         return conditions
     
-    def _extract_race_number(self, soup: BeautifulSoup) -> Optional[int]:
-        """レース番号を抽出"""
+    def _extract_race_number(self, race_num_text: str) -> int:
+        """レース番号を抽出 - "11 R"のような形式"""
         try:
-            # "11 R"のような形式を探す
-            race_num_elem = soup.find('dt')
-            if race_num_elem:
-                race_num_text = race_num_elem.text.strip()
-                match = re.search(r'(\d+)\s*R', race_num_text)
-                if match:
-                    return int(match.group(1))
+            match = re.search(r'(\d+)\s*R', race_num_text)
+            if match:
+                return int(match.group(1))
         except Exception:
             pass
-        return None
+        return 1
     
     def _extract_venue_info(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """開催情報を抽出"""
+        """開催情報を抽出（日付、競馬場）"""
         info = {}
         
         try:
-            # "2025年05月25日 2回東京10日目"のような形式を探す
+            # "2024年12月08日 7回京都4日目"のような形式を探す
             date_elem = soup.find('p', class_='smalltxt')
             if date_elem:
                 date_text = date_elem.text
@@ -357,12 +323,11 @@ class RaceDetailExtractor:
         return info
     
     def _extract_additional_race_info(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """追加のレース情報を抽出"""
+        """追加のレース情報を抽出（出走頭数、勝ちタイムなど）"""
         info = {}
         
         try:
-            # 結果テーブルから出走頭数、勝ちタイムなどを取得
-            result_table = soup.find('table')
+            result_table = soup.find('table', class_='race_table_01')
             if result_table:
                 rows = result_table.find_all('tr')
                 if rows:
@@ -380,27 +345,60 @@ class RaceDetailExtractor:
         
         return info
     
-    # ヘルパーメソッド
+    def _extract_trainer_info(self, cells: List, index: int) -> Tuple[str, Optional[str], Optional[str]]:
+        """調教師情報を抽出"""
+        trainer_name = ""
+        trainer_region = None
+        trainer_id = None
+        
+        if len(cells) > index:
+            trainer_cell = cells[index]
+            trainer_elem = trainer_cell.find('a')
+            if trainer_elem:
+                trainer_name = trainer_elem.text.strip()
+                trainer_id = self._extract_id_from_url(trainer_elem.get('href', ''), 'trainer')
+            
+            # 地域を抽出 - [西]や[東]
+            region_match = re.search(r'\[(東|西)\]', trainer_cell.text)
+            if region_match:
+                trainer_region = region_match.group(1)
+                
+        return trainer_name, trainer_region, trainer_id
+    
+    def _extract_owner_info(self, cells: List, index: int) -> Tuple[str, Optional[str]]:
+        """馬主情報を抽出"""
+        owner_name = ""
+        owner_id = None
+        
+        if len(cells) > index:
+            owner_cell = cells[index]
+            owner_elem = owner_cell.find('a')
+            if owner_elem:
+                owner_name = owner_elem.text.strip()
+                owner_id = self._extract_id_from_url(owner_elem.get('href', ''), 'owner')
+                
+        return owner_name, owner_id
+    
+    # === パースヘルパーメソッド ===
+    
     def _parse_int(self, text: str) -> Optional[int]:
         """安全に整数をパース"""
         try:
-            return int(text.strip())
+            return int(text.strip()) if text.strip() else None
         except (ValueError, AttributeError):
             return None
     
     def _parse_decimal(self, text: str) -> Optional[Decimal]:
         """安全にDecimalをパース"""
         try:
-            # カンマを除去
             cleaned_text = text.strip().replace(',', '')
-            return Decimal(cleaned_text)
+            return Decimal(cleaned_text) if cleaned_text else None
         except (InvalidOperation, AttributeError, ValueError):
             return None
     
     def _parse_sex_age(self, sex_age: str) -> Tuple[Optional[str], Optional[int]]:
-        """性齢をパース"""
+        """性齢をパース - "牝2" -> ("牝", 2)"""
         try:
-            # "牝3" -> ("牝", 3)
             match = re.match(r'([牡牝セ])(\d+)', sex_age.strip())
             if match:
                 sex = match.group(1)
@@ -411,10 +409,8 @@ class RaceDetailExtractor:
         return None, None
     
     def _parse_horse_weight(self, weight_text: str) -> Tuple[Optional[int], Optional[int]]:
-        """馬体重をパース"""
+        """馬体重をパース - "484(0)" -> (484, 0)"""
         try:
-            # "474(+4)" -> (474, 4)
-            # "450(-2)" -> (450, -2)
             match = re.match(r'(\d+)\(([+-]?\d+)\)', weight_text.strip())
             if match:
                 weight = int(match.group(1))
@@ -424,56 +420,70 @@ class RaceDetailExtractor:
             pass
         return None, None
     
-    def _extract_horse_id(self, href: str) -> Optional[str]:
-        """馬URLから馬IDを抽出"""
+    def _extract_id_from_url(self, href: str, entity_type: str) -> Optional[str]:
+        """URLからIDを抽出する統一メソッド"""
         try:
-            match = re.search(r'/horse/(\d+)/?', href)
-            if match:
-                return match.group(1)
-        except Exception:
-            pass
-        return None
-    
-    def _extract_jockey_id(self, href: str) -> Optional[str]:
-        """騎手URLから騎手IDを抽出"""
-        try:
-            match = re.search(r'/jockey/result/recent/(\d+)/?', href)
-            if match:
-                return match.group(1)
-        except Exception:
-            pass
-        return None
-    
-    def _extract_trainer_id(self, href: str) -> Optional[str]:
-        """調教師URLから調教師IDを抽出"""
-        try:
-            match = re.search(r'/trainer/result/recent/(\d+)/?', href)
-            if match:
-                return match.group(1)
-        except Exception:
-            pass
-        return None
-    
-    def _extract_owner_id(self, href: str) -> Optional[str]:
-        """馬主URLから馬主IDを抽出"""
-        try:
-            match = re.search(r'/owner/result/recent/(\d+)/?', href)
+            if entity_type == 'horse':
+                match = re.search(r'/horse/(\d+)/?', href)
+            elif entity_type == 'jockey':
+                match = re.search(r'/jockey/result/recent/(\d+)/?', href)
+            elif entity_type == 'trainer':
+                match = re.search(r'/trainer/result/recent/(\d+)/?', href)
+            elif entity_type == 'owner':
+                match = re.search(r'/owner/result/recent/(\d+)/?', href)
+            else:
+                return None
+                
             if match:
                 return match.group(1)
         except Exception:
             pass
         return None
 
+
 # 使用例とテスト用コード
 if __name__ == "__main__":
-    import sys
-    import os
+    import requests
     
     logging.basicConfig(level=logging.INFO)
     
-    # サンプルHTMLでテスト（実際のHTMLデータで置き換える）
     extractor = RaceDetailExtractor()
     
     print("=== Race Detail Extractor Test ===")
-    print("Ready to extract race detail data")
-    print("Use with actual HTML content from race detail pages")
+    
+    # テスト用URL
+    test_url = "https://db.netkeiba.com/race/202408070411/"
+    race_id = "202408070411"
+    
+    try:
+        # HTMLを取得
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(test_url, headers=headers)
+        response.raise_for_status()
+        response.encoding = 'euc-jp'
+        
+        print(f"Successfully fetched HTML from {test_url}")
+        
+        # データを抽出
+        result = extractor.extract_race_detail(response.text, race_id)
+        
+        if result:
+            race, race_results = result
+            print(f"\n=== Race Info ===")
+            print(f"Race Name: {race.race_name}")
+            print(f"Date: {race.race_date}")
+            print(f"Track: {race.track_name}")
+            print(f"Distance: {race.distance}m ({race.track_type})")
+            print(f"Total Horses: {race.total_horses}")
+            
+            print(f"\n=== Race Results (Top 5) ===")
+            for i, result in enumerate(race_results[:5]):
+                print(f"{result.finish_position}着: {result.horse_name} ({result.jockey_name})")
+                
+        else:
+            print("Failed to extract race data")
+            
+    except Exception as e:
+        print(f"Error: {str(e)}")
