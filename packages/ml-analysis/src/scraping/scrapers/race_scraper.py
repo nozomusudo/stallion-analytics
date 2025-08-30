@@ -151,6 +151,7 @@ class RaceScraper(BaseScraper):
         """
         
         detail_url = f"{self.base_url}/race/{race_id}/"
+        logger.info(f"race detail url: {detail_url}")
         
         try:
             logger.debug(f"Fetching race detail: {race_id}")

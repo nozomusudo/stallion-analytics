@@ -45,6 +45,11 @@ class RaceDetailExtractor:
                 return None
             
             logger.info(f"Successfully extracted race data: {race_id} ({len(results)} horses)")
+
+            logger.info(f"RACE IS: {race}")
+            for res in results[:5]:
+                logger.info(f"RESULT: {res}")
+
             return race, results
             
         except Exception as e:
@@ -137,7 +142,7 @@ class RaceDetailExtractor:
                     continue
             
             logger.info(f"Extracted {len(results)} race results for {race_id}")
-            # logger.info(f"First 3 results: {results[:3]}")
+            # logger.info(f"First 5 results: {results[:5]}")
             return results
             
         except Exception as e:
@@ -452,8 +457,8 @@ if __name__ == "__main__":
     print("=== Race Detail Extractor Test ===")
     
     # テスト用URL
-    test_url = "https://db.netkeiba.com/race/202408070411/"
-    race_id = "202408070411"
+    test_url = "https://db.netkeiba.com/race/201206050810/"
+    race_id = "201206050810"
     
     try:
         # HTMLを取得

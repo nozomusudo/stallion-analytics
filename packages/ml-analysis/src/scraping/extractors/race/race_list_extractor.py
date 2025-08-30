@@ -127,7 +127,7 @@ class RaceListExtractor:
                 race_data['race_id'] = self._extract_race_id(race_link.get('href', ''))
                 race_data['grade'] = self._extract_grade(race_data['race_name'])
             
-            logger.info(f"race-name: {race_data['race_name']}")
+            # logger.info(f"race-name: {race_data['race_name']}")
             
             # 距離 (6列目) - "芝2400"のような形式
             distance_cell = cells[6]

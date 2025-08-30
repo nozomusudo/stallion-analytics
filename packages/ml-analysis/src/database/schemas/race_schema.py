@@ -16,7 +16,7 @@ class Race:
     track_name: str
     race_number: int
     race_name: str
-    distance: int
+    distance: str
     track_type: str
     total_horses: int
 
