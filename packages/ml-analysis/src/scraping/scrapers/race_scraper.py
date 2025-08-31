@@ -8,6 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, date
 from urllib.parse import urljoin
+import math
 
 import requests
 from bs4 import BeautifulSoup
@@ -25,6 +26,7 @@ class RaceScraper(BaseScraper):
     
     def __init__(self, delay: float = 1.0):
         super().__init__(delay)
+        self.delay = delay  # 明示的に設定
         self.base_url = "https://db.netkeiba.com"
         self.list_extractor = RaceListExtractor()
         self.detail_extractor = RaceDetailExtractor()
@@ -77,6 +79,14 @@ class RaceScraper(BaseScraper):
                                      limit: int = 100) -> List[Dict[str, Any]]:
         """
         条件指定でレース一覧を取得
+        https://db.netkeiba.com/?pid=race_list&word=
+            &start_year=2010&start_mon=none&end_year=2018&end_mon=none
+            &list=100&page=2
+            &sort=date&track%5B%5D=1
+            &jyo%5B%5D=01&jyo%5B%5D=02&jyo%5B%5D=03&jyo%5B%5D=04&jyo%5B%5D=05
+            &jyo%5B%5D=06&jyo%5B%5D=07&jyo%5B%5D=08&jyo%5B%5D=09&jyo%5B%5D=10
+            &grade%5B%5D=1
+            &page=2
         
         Args:
             start_year: 開始年
@@ -103,41 +113,70 @@ class RaceScraper(BaseScraper):
             '10'   # 小倉
         ]
         
+        # listパラメータは100で固定（最大効率）
+        list_size = 100
+        all_races = []
+        
         # URL構築
         base_list_url = f"{self.base_url}/?pid=race_list"
         
-        params = {
+        base_params = {
             'word': '',
             'start_year': start_year,
             'start_mon': 'none', 
             'end_year': end_year,
             'end_mon': 'none',
-            'list': limit,
+            'list': list_size,
             'sort': 'date',
             'track[]': tracks,        # リストとして渡す
             'jyo[]': JRA_TRACKS,      # リストとして渡す
-            'grade[]': grades     # リストとして渡す
+            'grade[]': grades         # リストとして渡す
         }
         
         try:
-            logger.info(f"Fetching race list: {start_year}-{end_year}, grades: {grades}")
+            logger.info(f"Fetching race list: {start_year}-{end_year}, grades: {grades}, limit: {limit}")
             
-            response = self.session.get(base_list_url, params=params, timeout=30)
-            response.raise_for_status()
-            response.encoding = 'euc-jp'
+            page = 1
+            while len(all_races) < limit:
+                # ページパラメータを追加
+                params = base_params.copy()
+                params['page'] = page
+                
+                logger.info(f"Fetching page {page}...")
+                
+                response = self.session.get(base_list_url, params=params, timeout=30)
+                response.raise_for_status()
+                response.encoding = 'euc-jp'
+                
+                logger.debug(f"Page {page} URL: {response.url}")
+                logger.debug(f"Page {page} status: {response.status_code}")
+                
+                # レース一覧を抽出
+                page_races = self.list_extractor.extract_race_list(response.text)
+                
+                if not page_races:
+                    logger.info(f"No races found on page {page} - reached end of results")
+                    break
+                
+                logger.info(f"Page {page}: Found {len(page_races)} races")
+                all_races.extend(page_races)
+                
+                # limitに達したら終了
+                if len(all_races) >= limit:
+                    all_races = all_races[:limit]  # 超過分を削除
+                    break
+                
+                page += 1
+                
+                # レート制限
+                time.sleep(self.delay)
             
-            logger.info(f"Final URL: {response.url}")
-            logger.info(f"Response status: {response.status_code}")
-            
-            # レース一覧を抽出
-            race_list = self.list_extractor.extract_race_list(response.text)
-            
-            logger.info(f"Found {len(race_list)} races")
-            return race_list
+            logger.info(f"Total races collected: {len(all_races)}")
+            return all_races
             
         except Exception as e:
             logger.error(f"Error fetching race list: {str(e)}")
-            return []
+            return all_races  # エラー時もそれまでに取得したデータを返す
     
     def scrape_race_detail(self, race_id: str) -> Optional[Tuple[Race, List[RaceResult]]]:
         """
