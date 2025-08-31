@@ -20,7 +20,7 @@ class RaceListExtractor:
 
     
     
-    def extract_race_list(self, html: str) -> List[Dict[str, Any]]:
+    def extract_race_list(self, html: str, detail = False) -> List[Dict[str, Any]]:
         """
         レース一覧ページのHTMLからレース情報を抽出
         
@@ -64,7 +64,7 @@ class RaceListExtractor:
             for row in race_rows:
                 try:
                     # logger.info(f"Processing row: {row}")
-                    race_data = self._extract_race_row(row)
+                    race_data = self._extract_race_row(row, detail=detail)
                     if race_data:
                         races.append(race_data)
                 except Exception as e:
@@ -78,7 +78,7 @@ class RaceListExtractor:
             logger.error(f"Error parsing race list HTML: {str(e)}")
             return []
     
-    def _extract_race_row(self, row) -> Optional[Dict[str, Any]]:
+    def _extract_race_row(self, row, detail=False) -> Optional[Dict[str, Any]]:
         """
         単一のレース行からデータを抽出
         
@@ -96,6 +96,19 @@ class RaceListExtractor:
                 return None
             
             race_data = {}
+
+            # レース名 (5列目) - リンクからレースIDも取得
+            race_name_cell = cells[4]
+            race_link = race_name_cell.find('a')
+            if race_link:
+                race_data['race_name'] = race_link.text.strip()
+                race_data['race_id'] = self._extract_race_id(race_link.get('href', ''))
+
+                # 詳細情報が必要な場合のみこれ以降の情報を抽出
+                if not detail:
+                    return race_data
+
+                race_data['grade'] = self._extract_grade(race_data['race_name'])
             
             # 開催日 (1列目)
             date_cell = cells[0]
@@ -119,13 +132,7 @@ class RaceListExtractor:
             race_num_cell = cells[3]
             race_data['race_number'] = self._parse_int(race_num_cell.text.strip())
             
-            # レース名 (5列目) - リンクからレースIDも取得
-            race_name_cell = cells[4]
-            race_link = race_name_cell.find('a')
-            if race_link:
-                race_data['race_name'] = race_link.text.strip()
-                race_data['race_id'] = self._extract_race_id(race_link.get('href', ''))
-                race_data['grade'] = self._extract_grade(race_data['race_name'])
+            
             
             # logger.info(f"race-name: {race_data['race_name']}")
             

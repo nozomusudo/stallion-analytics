@@ -210,6 +210,17 @@ class PostgreSQLStorage:
                             'created_at': result.created_at or datetime.now(),
                             'updated_at': result.updated_at or datetime.now()
                         }
+
+                        # 馬がすでに存在しない場合は追加
+                        if not self.check_horse_exists(result.horse_id):
+                            horse_data = {
+                                'id': result.horse_id,
+                                'name_ja': result.horse_name,
+                                'created_at': datetime.now(),
+                                'updated_at': datetime.now()
+                            }
+                            self.insert_horse_basic(horse_data)
+
                         insert_data.append(data)
                     
                     # バッチインサート実行

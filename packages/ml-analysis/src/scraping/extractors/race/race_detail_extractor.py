@@ -44,11 +44,11 @@ class RaceDetailExtractor:
                 logger.warning(f"No race results found for {race_id}")
                 return None
             
-            logger.info(f"Successfully extracted race data: {race_id} ({len(results)} horses)")
+            # logger.info(f"Successfully extracted race data: {race_id} ({len(results)} horses)")
 
-            logger.info(f"RACE IS: {race}")
-            for res in results[:5]:
-                logger.info(f"RESULT: {res}")
+            # logger.info(f"RACE IS: {race}")
+            # for res in results[:5]:
+                # logger.info(f"RESULT: {res}")
 
             return race, results
             
