@@ -158,6 +158,9 @@ class RaceScraper(BaseScraper):
             
             response = self.session.get(detail_url, timeout=30)
             response.raise_for_status()
+            response.encoding = 'euc-jp'
+
+            # logger.info(f"extract_race_detailに送る前のrace_scraperでの処理です！rsponse=: {response.text[:1000]}")  # 最初の1000文字だけ表示
             
             # レース詳細を抽出
             race_data = self.detail_extractor.extract_race_detail(response.text, race_id)

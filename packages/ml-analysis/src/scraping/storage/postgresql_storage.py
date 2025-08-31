@@ -113,6 +113,7 @@ class PostgreSQLStorage:
     def insert_race(self, race: Race) -> bool:
         """レース基本情報を挿入"""
         try:
+            logger.info(f"Race Is: {race}")
             
             race_data = {
                 'race_id': race.race_id,

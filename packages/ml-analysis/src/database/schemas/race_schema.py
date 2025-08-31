@@ -131,9 +131,6 @@ class RaceDataValidator:
         if not race.race_id or len(race.race_id) != 12:
             errors.append("race_id must be 12 characters")
 
-        if race.distance <= 0:
-            errors.append("distance must be positive")
-
         return errors
 
     @staticmethod
