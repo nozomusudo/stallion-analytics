@@ -19,7 +19,7 @@ class BaseScraper(ABC):
     def get_soup(self, url: str) -> Optional[BeautifulSoup]:
         """URLからBeautifulSoupオブジェクトを取得"""
         try:
-            print(f"🔍 ページ取得: {url}")
+            # print(f"🔍 ページ取得: {url}")
             response = self.session.get(url, timeout=15)
             response.raise_for_status()
             response.encoding = 'euc-jp'

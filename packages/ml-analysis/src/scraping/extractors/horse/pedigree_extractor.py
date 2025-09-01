@@ -25,7 +25,7 @@ class PedigreeExtractor:
                     sire_id_match = re.search(r'/horse/ped/([0-9a-zA-Z]+)/', href)
                     if sire_id_match:
                         pedigree_ids['sire_id'] = sire_id_match.group(1)
-                        print(f"    🧬 父ID取得: {pedigree_ids['sire_id']}")
+                        # print(f"    🧬 父ID取得: {pedigree_ids['sire_id']}")
                 
                 # 3行目: 母
                 dam_link = rows[2].find('a', href=re.compile(r'/horse/ped/[0-9a-zA-Z]+/'))
@@ -34,7 +34,7 @@ class PedigreeExtractor:
                     dam_id_match = re.search(r'/horse/ped/([0-9a-zA-Z]+)/', href)
                     if dam_id_match:
                         pedigree_ids['dam_id'] = dam_id_match.group(1)
-                        print(f"    🧬 母ID取得: {pedigree_ids['dam_id']}")
+                        # print(f"    🧬 母ID取得: {pedigree_ids['dam_id']}")
                 
                 # 4行目: 母父
                 bms_link = rows[3].find('a', href=re.compile(r'/horse/ped/[0-9a-zA-Z]+/'))
@@ -43,7 +43,7 @@ class PedigreeExtractor:
                     bms_id_match = re.search(r'/horse/ped/([0-9a-zA-Z]+)/', href)
                     if bms_id_match:
                         pedigree_ids['maternal_grandsire_id'] = bms_id_match.group(1)
-                        print(f"    🧬 母父ID取得: {pedigree_ids['maternal_grandsire_id']}")
+                        # print(f"    🧬 母父ID取得: {pedigree_ids['maternal_grandsire_id']}")
             
             return pedigree_ids
             
@@ -57,7 +57,7 @@ class PedigreeExtractor:
         relations = []
         
         try:
-            print(f"  🌳 血統関係取得: {horse_id}")
+            # print(f"  🌳 血統関係取得: {horse_id}")
             response = session.get(pedigree_url, timeout=15)
             response.raise_for_status()
             response.encoding = 'euc-jp'
@@ -149,13 +149,13 @@ class PedigreeExtractor:
             if relation['horse_b_id'] == horse_id:
                 if relation['relation_type'] == 'sire_of':
                     pedigree_ids['sire_id'] = relation['horse_a_id']
-                    print(f"    🧬 父ID設定: {pedigree_ids['sire_id']}")
+                    # print(f"    🧬 父ID設定: {pedigree_ids['sire_id']}")
                 elif relation['relation_type'] == 'dam_of':
                     pedigree_ids['dam_id'] = relation['horse_a_id']
-                    print(f"    🧬 母ID設定: {pedigree_ids['dam_id']}")
+                    # print(f"    🧬 母ID設定: {pedigree_ids['dam_id']}")
                 elif relation['relation_type'] == 'bms_of':
                     pedigree_ids['maternal_grandsire_id'] = relation['horse_a_id']
-                    print(f"    🧬 母父ID設定: {pedigree_ids['maternal_grandsire_id']}")
+                    # print(f"    🧬 母父ID設定: {pedigree_ids['maternal_grandsire_id']}")
         
         return pedigree_ids
     
@@ -174,7 +174,7 @@ class PedigreeExtractor:
                 # 既存関係に子供IDを追加
                 updated_relation = self.add_child_to_mating(existing_mating, horse_id, storage.supabase)
                 if updated_relation:
-                    print(f"    💕 種付関係更新: {sire_id} × {dam_id} → 子供追加: {horse_id}")
+                    # print(f"    💕 種付関係更新: {sire_id} × {dam_id} → 子供追加: {horse_id}")
                     mating_relations.append(updated_relation)
             else:
                 # 新規mating関係を作成
@@ -185,7 +185,7 @@ class PedigreeExtractor:
                     'children_ids': [horse_id]  # 最初の子供として追加
                 }
                 mating_relations.append(new_relation)
-                print(f"    💕 種付関係新規作成: {sire_id} × {dam_id} → 子供: {horse_id}")
+                # print(f"    💕 種付関係新規作成: {sire_id} × {dam_id} → 子供: {horse_id}")
         
         return mating_relations
     
@@ -239,10 +239,10 @@ class PedigreeExtractor:
                 
                 if update_result.data:
                     updated_relation = update_result.data[0]
-                    print(f"      👶 子供ID追加完了: 現在の子供数 {len(updated_children)}")
+                    # print(f"      👶 子供ID追加完了: 現在の子供数 {len(updated_children)}")
                     return updated_relation
             else:
-                print(f"      💡 子供ID既存: {horse_id} は既にリストに含まれています")
+                # print(f"      💡 子供ID既存: {horse_id} は既にリストに含まれています")
                 return existing_mating
                 
         except Exception as e:

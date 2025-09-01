@@ -26,7 +26,7 @@ class BasicInfoExtractor:
         
         # ページタイトルチェック
         title = soup.find('title')
-        print(f"    📄 ページタイトル: {title.text if title else 'タイトル未発見'}")
+        # print(f"    📄 ページタイトル: {title.text if title else 'タイトル未発見'}")
         
         # 各情報を抽出
         horse_data.update(self.extract_horse_name(soup))
@@ -50,7 +50,7 @@ class BasicInfoExtractor:
                 if h1_tag:
                     name_text = h1_tag.get_text(strip=True)
                     if name_text:
-                        print(f"    📝 馬名取得: {name_text}")
+                        # print(f"    📝 馬名取得: {name_text}")
                         return {'name_ja': name_text}
         
         return {}
@@ -64,7 +64,7 @@ class BasicInfoExtractor:
                 text = sex_text.get_text(strip=True)
                 for jp_sex, en_sex in SEX_MAPPING.items():
                     if jp_sex in text:
-                        print(f"    🔤 性別取得: {en_sex}")
+                        # print(f"    🔤 性別取得: {en_sex}")
                         return {'sex': en_sex}
         
         return {}
@@ -76,7 +76,7 @@ class BasicInfoExtractor:
             eng_link = eng_name.find('a')
             if eng_link:
                 eng_name_text = eng_link.get_text(strip=True)
-                print(f"    🔤 英語名取得: {eng_name_text}")
+                # print(f"    🔤 英語名取得: {eng_name_text}")
                 return {'name_en': eng_name_text}
         
         return {}
@@ -86,7 +86,7 @@ class BasicInfoExtractor:
         profile_table = self.find_profile_table(soup)
         
         if profile_table:
-            print(f"    ✅ プロフィールテーブル発見")
+            # print(f"    ✅ プロフィールテーブル発見")
             return self.parse_profile_table(profile_table)
         else:
             print(f"    ❌ プロフィールテーブル未発見")
@@ -130,7 +130,7 @@ class BasicInfoExtractor:
                     value = self.extract_field_value(value_cell, field_name)
                     if value:
                         profile_data[field_name] = value
-                        print(f"      - {label} ({field_name}): {value}")
+                        # print(f"      - {label} ({field_name}): {value}")
         
         return profile_data
     

@@ -8,6 +8,7 @@ import logging
 from typing import Optional, List, Dict, Any, Tuple
 from contextlib import contextmanager
 from datetime import datetime
+import json
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -108,6 +109,102 @@ class PostgreSQLStorage:
                     return True
         except Exception as e:
             logger.error(f"Error inserting horse {horse_data.get('id', 'Unknown')}: {e}")
+            return False
+    
+    def insert_horse_full(self, horse_data: Dict[str, Any]) -> bool:
+        """完全な馬情報を挿入・更新"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    # birth_dateの変換
+                    birth_date = None
+                    if horse_data.get('birth_date'):
+                        birth_date = datetime.strptime(horse_data['birth_date'], '%Y-%m-%d').date()
+                    
+                    cursor.execute("""
+                        INSERT INTO horses (
+                            id, name_ja, name_en, birth_date, sex, 
+                            sire_id, dam_id, maternal_grandsire_id, profile,
+                            created_at, updated_at
+                        )
+                        VALUES (
+                            %(id)s, %(name_ja)s, %(name_en)s, %(birth_date)s, %(sex)s,
+                            %(sire_id)s, %(dam_id)s, %(maternal_grandsire_id)s, %(profile)s,
+                            NOW(), NOW()
+                        )
+                        ON CONFLICT (id) DO UPDATE SET
+                            name_en = EXCLUDED.name_en,
+                            birth_date = EXCLUDED.birth_date,
+                            sex = EXCLUDED.sex,
+                            sire_id = EXCLUDED.sire_id,
+                            dam_id = EXCLUDED.dam_id,
+                            maternal_grandsire_id = EXCLUDED.maternal_grandsire_id,
+                            profile = EXCLUDED.profile,
+                            updated_at = NOW()
+                    """, {
+                        'id': horse_data['id'],
+                        'name_ja': horse_data['name_ja'],
+                        'name_en': horse_data.get('name_en'),
+                        'birth_date': birth_date,
+                        'sex': horse_data.get('sex'),
+                        'sire_id': horse_data.get('sire_id'),
+                        'dam_id': horse_data.get('dam_id'),
+                        'maternal_grandsire_id': horse_data.get('maternal_grandsire_id'),
+                        'profile': json.dumps(horse_data.get('profile')) if horse_data.get('profile') else None
+                    })
+                    conn.commit()
+                    logger.debug(f"Horse full data inserted/updated: {horse_data['id']}")
+                    return True
+        except Exception as e:
+            logger.error(f"Error inserting full horse data {horse_data.get('id', 'Unknown')}: {e}")
+            return False
+    
+    def insert_horse_relations(self, relations: List[Dict]) -> bool:
+        """血統関係をPostgreSQLに保存"""
+        if not relations:
+            return False
+        
+        try:
+            saved_count = 0
+            
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    for relation in relations:
+                        # 重複チェック
+                        cursor.execute("""
+                            SELECT id FROM horse_relations 
+                            WHERE horse_a_id = %s AND horse_b_id = %s AND relation_type = %s
+                        """, (
+                            relation['horse_a_id'], 
+                            relation['horse_b_id'], 
+                            relation['relation_type']
+                        ))
+                        
+                        existing = cursor.fetchone()
+                        
+                        if not existing:
+                            cursor.execute("""
+                                INSERT INTO horse_relations (
+                                    horse_a_id, horse_b_id, relation_type, children_ids, created_at
+                                )
+                                VALUES (%s, %s, %s, %s, NOW())
+                            """, (
+                                relation['horse_a_id'],
+                                relation['horse_b_id'], 
+                                relation['relation_type'],
+                                relation.get('children_ids')
+                            ))
+                            saved_count += 1
+                            logger.debug(f"Relation saved: {relation['relation_type']} ({relation['horse_a_id']} -> {relation['horse_b_id']})")
+                        else:
+                            logger.debug(f"Relation already exists: {relation['relation_type']}")
+                    
+                    conn.commit()
+                    logger.info(f"Saved {saved_count} relations")
+                    return True
+            
+        except Exception as e:
+            logger.error(f"Error saving relations: {e}")
             return False
     
     def insert_race(self, race: Race) -> bool:
