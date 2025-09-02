@@ -75,7 +75,8 @@ class RaceScraper(BaseScraper):
                                      start_year: int = 2024,
                                      end_year: int = 2025,
                                      grades: List[str] = ['1', '2'],  # G1, G2
-                                     tracks: List[str] = ['1'],       # 中央競馬のみ
+                                     track_types: List[str] = ['1'],  # コース種別: 1=芝, 2=ダート
+                                     venue_types: List[str] = ['jra'],  # 競馬場種別: 'jra', 'local', 'all'
                                      limit: int = 100) -> List[Dict[str, Any]]:
         """
         条件指定でレース一覧を取得
@@ -112,6 +113,32 @@ class RaceScraper(BaseScraper):
             '09',  # 阪神
             '10'   # 小倉
         ]
+
+        # 地方競馬場のコード定数
+        LOCAL_TRACKS = [
+            '30',  # 門別
+            '35',  # 盛岡
+            '36',  # 水沢
+            '42',  # 浦和
+            '43',  # 船橋
+            '44',  # 大井
+            '45',  # 川崎
+            '46',  # 金沢
+            '47',  # 笠松
+            '48',  # 名古屋
+            '50',  # 園田
+            '51',  # 姫路
+            '54',  # 高知
+            '55',  # 佐賀
+            '65'   # 帯広(ば)
+        ]
+
+        """競馬場種別から競馬場コードリストを生成"""
+        track_codes = []
+        if 'jra' in venue_types or 'all' in venue_types:
+            track_codes.extend(JRA_TRACKS)
+        if 'local' in venue_types or 'all' in venue_types:
+            track_codes.extend(LOCAL_TRACKS)
         
         # listパラメータは100で固定（最大効率）
         list_size = 100
@@ -128,8 +155,8 @@ class RaceScraper(BaseScraper):
             'end_mon': 'none',
             'list': list_size,
             'sort': 'date',
-            'track[]': tracks,        # リストとして渡す
-            'jyo[]': JRA_TRACKS,      # リストとして渡す
+            'track[]': track_types,        # リストとして渡す
+            'jyo[]': track_codes,      # リストとして渡す
             'grade[]': grades         # リストとして渡す
         }
         

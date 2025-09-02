@@ -250,15 +250,24 @@ class PostgreSQLStorage:
                             %(prize_1st)s, %(race_class)s, %(race_conditions)s, %(created_at)s, %(updated_at)s
                         )
                         ON CONFLICT (race_id) DO UPDATE SET
-                            updated_at = EXCLUDED.updated_at,
+                            race_date = EXCLUDED.race_date,
+                            track_name = EXCLUDED.track_name,
+                            race_number = EXCLUDED.race_number,
                             race_name = EXCLUDED.race_name,
                             distance = EXCLUDED.distance,
+                            track_type = EXCLUDED.track_type,
                             total_horses = EXCLUDED.total_horses,
                             grade = EXCLUDED.grade,
+                            track_direction = EXCLUDED.track_direction,
                             weather = EXCLUDED.weather,
                             track_condition = EXCLUDED.track_condition,
+                            start_time = EXCLUDED.start_time,
                             winning_time = EXCLUDED.winning_time,
-                            prize_1st = EXCLUDED.prize_1st
+                            pace = EXCLUDED.pace,
+                            prize_1st = EXCLUDED.prize_1st,
+                            race_class = EXCLUDED.race_class,
+                            race_conditions = EXCLUDED.race_conditions,
+                            updated_at = EXCLUDED.updated_at
                     """, race_data)
                     conn.commit()
                     logger.debug(f"Race inserted/updated: {race.race_id} ({race.race_name})")

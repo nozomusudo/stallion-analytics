@@ -44,12 +44,7 @@ class RaceDetailExtractor:
                 logger.warning(f"No race results found for {race_id}")
                 return None
             
-            # logger.info(f"Successfully extracted race data: {race_id} ({len(results)} horses)")
-
-            # logger.info(f"RACE IS: {race}")
-            # for res in results[:5]:
-                # logger.info(f"RESULT: {res}")
-
+            logger.info(f"Successfully extracted race data: {race_id} ({len(results)} horses)")
             return race, results
             
         except Exception as e:
@@ -142,7 +137,7 @@ class RaceDetailExtractor:
                     continue
             
             logger.info(f"Extracted {len(results)} race results for {race_id}")
-            # logger.info(f"First 5 results: {results[:5]}")
+            # logger.info(f"First 3 results: {results[:3]}")
             return results
             
         except Exception as e:
@@ -248,6 +243,12 @@ class RaceDetailExtractor:
             return 'G2'
         elif '(GIII)' in race_name or '(G3)' in race_name:
             return 'G3'
+        elif '(JpnI)' in race_name or '(Jpn1)' in race_name:
+            return 'Jpn1'
+        elif '(JpnII)' in race_name or '(Jpn2)' in race_name:
+            return 'Jpn2'
+        elif '(JpnIII)' in race_name or '(Jpn3)' in race_name:
+            return 'Jpn3'
         return None
     
     def _extract_race_conditions(self, racedata_elem) -> Dict[str, Any]:
@@ -257,15 +258,25 @@ class RaceDetailExtractor:
         try:
             condition_text = racedata_elem.get_text()
             
-            # 距離とコース種別 - "芝右 外1600m"のような形式
-            distance_match = re.search(r'(芝|ダート?)([左右直線]*?)\s*(?:外|内)?(\d+)m', condition_text)
+            # 距離とコース種別 - より柔軟なパターンマッチング
+            # 右から左に向かって優先順位でマッチング
+            distance_match = re.search(r'(.*?)([右左直].*?)(\d+m)', condition_text)
             if distance_match:
-                track_type = distance_match.group(1)
-                if track_type.startswith('ダ'):
+                track_type_raw = distance_match.group(1).strip()
+                track_direction = distance_match.group(2).strip()
+                distance_str = distance_match.group(3)
+                
+                # track_typeの正規化
+                if track_type_raw.startswith('ダ'):
                     track_type = 'ダート'
+                elif track_type_raw.startswith('芝'):
+                    track_type = '芝'
+                else:
+                    track_type = track_type_raw
+                
                 conditions['track_type'] = track_type
-                conditions['track_direction'] = distance_match.group(2) or None
-                conditions['distance'] = int(distance_match.group(3))
+                conditions['track_direction'] = track_direction if track_direction else None
+                conditions['distance'] = int(distance_str.rstrip('m'))
             
             # 天候 - "天候 : 曇"
             weather_match = re.search(r'天候\s*[:：]\s*([^\s/&]+)', condition_text)
@@ -427,6 +438,7 @@ class RaceDetailExtractor:
     
     def _extract_id_from_url(self, href: str, entity_type: str) -> Optional[str]:
         """URLからIDを抽出する統一メソッド"""
+        """
         try:
             if entity_type == 'horse':
                 match = re.search(r'/horse/(\d+)/?', href)
@@ -436,6 +448,26 @@ class RaceDetailExtractor:
                 match = re.search(r'/trainer/result/recent/(\d+)/?', href)
             elif entity_type == 'owner':
                 match = re.search(r'/owner/result/recent/(\d+)/?', href)
+            else:
+                return None
+                
+            if match:
+                return match.group(1)
+        except Exception:
+            pass
+        return None
+        """
+
+        try:
+            if entity_type == 'horse':
+                # 英数字対応
+                match = re.search(r'/horse/([a-zA-Z0-9]+)/?', href)
+            elif entity_type == 'jockey':
+                match = re.search(r'/jockey/result/recent/([a-zA-Z0-9]+)/?', href)
+            elif entity_type == 'trainer':
+                match = re.search(r'/trainer/result/recent/([a-zA-Z0-9]+)/?', href)
+            elif entity_type == 'owner':
+                match = re.search(r'/owner/result/recent/([a-zA-Z0-9]+)/?', href)
             else:
                 return None
                 
@@ -457,8 +489,8 @@ if __name__ == "__main__":
     print("=== Race Detail Extractor Test ===")
     
     # テスト用URL
-    test_url = "https://db.netkeiba.com/race/201206050810/"
-    race_id = "201206050810"
+    test_url = "https://db.netkeiba.com/race/202408070411/"
+    race_id = "202408070411"
     
     try:
         # HTMLを取得
