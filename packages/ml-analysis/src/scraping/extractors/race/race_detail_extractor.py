@@ -11,23 +11,23 @@ from decimal import Decimal, InvalidOperation
 
 from bs4 import BeautifulSoup
 
-from ....database.schemas.race_schema import Race, RaceResult
+from ....database.schemas.race_schema import Race, RaceResult, RacePayout
 
 logger = logging.getLogger(__name__)
 
 class RaceDetailExtractor:
     """レース詳細ページからレース情報と結果を抽出するクラス"""
     
-    def extract_race_detail(self, html: str, race_id: str) -> Optional[Tuple[Race, List[RaceResult]]]:
+    def extract_race_detail(self, html: str, race_id: str) -> Optional[Tuple[Race, List[RaceResult], List[RacePayout]]]:
         """
-        レース詳細ページのHTMLからレース情報と結果を抽出
+        レース詳細ページのHTMLからレース情報、結果、払い戻しを抽出
         
         Args:
             html: レース詳細ページのHTML
             race_id: レースID
             
         Returns:
-            Tuple[Race, List[RaceResult]]: レース基本情報と結果のタプル
+            Tuple[Race, List[RaceResult], List[RacePayout]]: レース基本情報、結果、払い戻しのタプル
         """
         try:
             soup = BeautifulSoup(html, 'html.parser')
@@ -44,8 +44,11 @@ class RaceDetailExtractor:
                 logger.warning(f"No race results found for {race_id}")
                 return None
             
-            logger.info(f"Successfully extracted race data: {race_id} ({len(results)} horses)")
-            return race, results
+            # 払い戻し情報を抽出
+            payouts = self._extract_race_payouts(soup, race_id)
+            
+            logger.info(f"Successfully extracted race data: {race_id} ({len(results)} horses, {len(payouts)} payouts)")
+            return race, results, payouts
             
         except Exception as e:
             logger.error(f"Error parsing race detail HTML for {race_id}: {str(e)}")
@@ -82,6 +85,9 @@ class RaceDetailExtractor:
             
             # 結果テーブルから追加情報を抽出
             additional_info = self._extract_additional_race_info(soup)
+
+            # コーナー通過順位とラップタイムを抽出
+            corner_lap_data = self._extract_corner_and_lap_data(soup)
             
             # Raceオブジェクトを構築
             race = Race(
@@ -101,7 +107,9 @@ class RaceDetailExtractor:
                 winning_time=additional_info.get('winning_time'),
                 pace=additional_info.get('pace'),
                 race_class=additional_info.get('race_class'),
-                race_conditions=additional_info.get('race_conditions')
+                race_conditions=additional_info.get('race_conditions'),
+                corner_positions=corner_lap_data['corner_positions'],
+                lap_data=corner_lap_data['lap_data']
             )
 
             # logger.info(f"RACE: {race}")
@@ -110,6 +118,96 @@ class RaceDetailExtractor:
             
         except Exception as e:
             logger.error(f"Error extracting race info for {race_id}: {str(e)}")
+            return None
+    
+    def _extract_corner_and_lap_data(self, soup: BeautifulSoup) -> Dict[str, Any]:
+        """コーナー通過順位とラップタイムデータを抽出"""
+        data = {
+            'corner_positions': None,
+            'lap_data': None
+        }
+        
+        try:
+            # result_table_02クラスのテーブルを全て取得
+            result_tables = soup.find_all('table', class_='result_table_02')
+            
+            for table in result_tables:
+                caption = table.find('caption')
+                if not caption:
+                    continue
+                    
+                caption_text = caption.text.strip()
+                
+                if caption_text == 'コーナー通過順位':
+                    data['corner_positions'] = self._extract_corner_positions(table)
+                elif caption_text == 'ラップタイム':
+                    data['lap_data'] = self._extract_lap_data(table)
+            
+            logger.debug(f"Corner/Lap data extraction: corners={data['corner_positions'] is not None}, "
+                        f"laps={data['lap_data'] is not None}")
+            
+            return data
+            
+        except Exception as e:
+            logger.warning(f"Error extracting corner/lap data: {str(e)}")
+            return data
+
+    def _extract_corner_positions(self, table) -> Optional[Dict[str, str]]:
+        """コーナー通過順位テーブルからデータを抽出"""
+        try:
+            corner_data = {}
+            rows = table.find_all('tr')
+            
+            for row in rows:
+                th = row.find('th')
+                td = row.find('td')
+                
+                if th and td:
+                    corner_name = th.text.strip()
+                    position_data = td.text.strip()
+                    
+                    # コーナー名を正規化
+                    if corner_name == '1コーナー':
+                        corner_data['corner_1'] = position_data
+                    elif corner_name == '2コーナー':
+                        corner_data['corner_2'] = position_data
+                    elif corner_name == '3コーナー':
+                        corner_data['corner_3'] = position_data
+                    elif corner_name == '4コーナー':
+                        corner_data['corner_4'] = position_data
+            
+            logger.debug(f"Extracted corner positions: {list(corner_data.keys())}")
+            return corner_data if corner_data else None
+            
+        except Exception as e:
+            logger.warning(f"Error extracting corner positions: {str(e)}")
+            return None
+
+    def _extract_lap_data(self, table) -> Optional[Dict[str, str]]:
+        """ラップタイムテーブルからデータを抽出"""
+        try:
+            lap_data = {}
+            rows = table.find_all('tr')
+            
+            for row in rows:
+                th = row.find('th')
+                td = row.find('td')
+                
+                if th and td:
+                    data_type = th.text.strip()
+                    time_data = td.text.strip()
+                    
+                    # データタイプを正規化
+                    if data_type == 'ラップ':
+                        lap_data['lap_times'] = time_data
+                    elif data_type == 'ペース':
+                        lap_data['pace_times'] = time_data
+            
+            logger.debug(f"Extracted lap data: {list(lap_data.keys())}")
+            return lap_data if lap_data else None
+            
+        except Exception as e:
+            logger.warning(f"Error extracting lap data: {str(e)}")
             return None
     
     def _extract_race_results(self, soup: BeautifulSoup, race_id: str) -> List[RaceResult]:
@@ -329,7 +427,7 @@ class RaceDetailExtractor:
                     info['race_date'] = date(year, month, day)
                 
                 # 競馬場を抽出
-                track_match = re.search(r'回([^日]+)\d+日目', date_text)
+                track_match = re.search(r'回([^日]+?)\d+日目', date_text)
                 if track_match:
                     info['track_name'] = track_match.group(1)
                     
@@ -395,14 +493,184 @@ class RaceDetailExtractor:
                 
         return owner_name, owner_id
     
+    def _extract_race_payouts(self, soup: BeautifulSoup, race_id: str) -> List[RacePayout]:
+        """払い戻し情報を抽出"""
+        payouts = []
+        
+        try:
+            # 払い戻しブロックを取得
+            pay_block = soup.find('dl', class_='pay_block')
+            if not pay_block:
+                logger.warning(f"Payout block not found for {race_id}")
+                return payouts
+            
+            # 払い戻しテーブルを取得（複数のテーブルがある場合がある）
+            pay_tables = pay_block.find_all('table', class_='pay_table_01')
+            
+            for table in pay_tables:
+                rows = table.find_all('tr')
+                
+                for row in rows:
+                    try:
+                        payout_data = self._extract_payout_row(row, race_id)
+                        if payout_data:
+                            payouts.extend(payout_data)  # 複勝などは複数の結果がある
+                    except Exception as e:
+                        logger.warning(f"Error extracting payout row for {race_id}: {str(e)}")
+                        continue
+            
+            logger.info(f"Extracted {len(payouts)} payout records for {race_id}")
+            return payouts
+            
+        except Exception as e:
+            logger.error(f"Error extracting payouts for {race_id}: {str(e)}")
+            return payouts
+
+    def _extract_payout_row(self, row, race_id: str) -> List[RacePayout]:
+        """単一の払い戻し行から情報を抽出（popularity対応版）"""
+        payouts = []
+        
+        try:
+            cells = row.find_all(['th', 'td'])
+            if len(cells) < 4:
+                return payouts
+            
+            # 券種を取得（thタグのクラスから判定）
+            bet_type_elem = cells[0]
+            bet_type = self._normalize_bet_type(bet_type_elem.text.strip(), bet_type_elem.get('class', []))
+            
+            if not bet_type:
+                return payouts
+            
+            # 組み合わせ、配当、人気を取得
+            combinations_text = cells[1].get_text(separator='\n', strip=True)
+            payouts_text = cells[2].get_text(separator='\n', strip=True)
+            popularity_text = cells[3].get_text(separator='\n', strip=True)
+            
+            # より厳密な分割処理
+            combinations = [c.strip() for c in combinations_text.split('\n') if c.strip()]
+            payout_amounts = [p.strip() for p in payouts_text.split('\n') if p.strip()]
+            popularities = [p.strip() for p in popularity_text.split('\n') if p.strip()]
+            
+            # 各組み合わせに対してPayoutオブジェクトを作成
+            for i in range(len(combinations)):
+                try:
+                    combination = self._normalize_combination(combinations[i])
+                    
+                    # 払い戻し金額の解析を改善
+                    payout_text = payout_amounts[i].replace(',', '').strip()
+                    
+                    # 数字以外が含まれている場合はスキップ
+                    if not re.match(r'^\d+$', payout_text):
+                        logger.warning(f"Invalid payout format: {payout_text}")
+                        continue
+                    
+                    payout_amount = self._parse_decimal(payout_text)
+                    
+                    # 人気の解析を改善（空白対応）
+                    popularity_str = popularities[i] if i < len(popularities) else ""
+                    popularity = self._parse_int(popularity_str)  # 空白の場合はNoneが返される
+                    
+                    # 払い戻し金額の妥当性チェック（上限緩和）
+                    if payout_amount is None or payout_amount <= 0:
+                        logger.warning(f"Invalid payout amount: {payout_text}")
+                        continue
+                    
+                    # 超高配当のログ出力のみ（除外しない）
+                    if payout_amount > Decimal('50000000'):  # 5000万円
+                        logger.info(f"Super high payout detected: {payout_amount} ({bet_type} {combination})")
+                    
+                    if combination and payout_amount is not None:
+                        payout = RacePayout(
+                            race_id=race_id,
+                            bet_type=bet_type,
+                            combination=combination,
+                            payout_amount=payout_amount,
+                            popularity=popularity  # Noneも許可
+                        )
+                        payouts.append(payout)
+                        
+                except Exception as e:
+                    logger.warning(f"Error creating payout object: {str(e)}")
+                    continue
+            
+            return payouts
+            
+        except Exception as e:
+            logger.warning(f"Error extracting payout row: {str(e)}")
+            return payouts
+
+
+    def _normalize_bet_type(self, bet_text: str, css_classes: List[str]) -> Optional[str]:
+        """券種を正規化（枠単対応版）"""
+        
+        # まずテキストベースで判定（優先）
+        bet_text_clean = bet_text.strip()
+        text_mapping = {
+            '単勝': '単勝',
+            '複勝': '複勝', 
+            '枠連': '枠連',
+            '枠単': '枠単',  # 新規追加
+            '馬連': '馬連',
+            'ワイド': 'ワイド',
+            '馬単': '馬単',
+            '三連複': '三連複',
+            '三連単': '三連単'
+        }
+        
+        # テキストマッチング（最優先）
+        if bet_text_clean in text_mapping:
+            return text_mapping[bet_text_clean]
+        
+        # CSSクラスから判定（フォールバック）
+        class_mapping = {
+            'tan': '単勝',
+            'fuku': '複勝',
+            'waku': '枠連',  # デフォルトは枠連（枠単はテキストで判定済み）
+            'uren': '馬連',
+            'wide': 'ワイド',
+            'utan': '馬単',
+            'sanfuku': '三連複',
+            'santan': '三連単'
+        }
+        
+        for css_class in css_classes:
+            if css_class in class_mapping:
+                # 特別処理：wakuクラスの場合はテキストも確認
+                if css_class == 'waku':
+                    if '枠単' in bet_text_clean:
+                        return '枠単'
+                    else:
+                        return '枠連'
+                return class_mapping[css_class]
+        
+        return None
+
+    def _normalize_combination(self, combination_text: str) -> str:
+        """組み合わせを正規化"""
+        # 全角数字を半角に変換
+        combination = combination_text.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+        
+        # スペースを統一
+        combination = re.sub(r'\s+', ' ', combination)
+        
+        # 矢印記号を統一
+        combination = combination.replace('→', '→').replace('->', '→')
+        
+        return combination.strip()
+    
     # === パースヘルパーメソッド ===
     
     def _parse_int(self, text: str) -> Optional[int]:
         """安全に整数をパース"""
         try:
-            return int(text.strip()) if text.strip() else None
+            text_stripped = text.strip()
+            if not text_stripped or text_stripped == '':
+                return None
+            return int(text_stripped)
         except (ValueError, AttributeError):
             return None
+
     
     def _parse_decimal(self, text: str) -> Optional[Decimal]:
         """安全にDecimalをパース"""

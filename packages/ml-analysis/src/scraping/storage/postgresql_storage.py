@@ -14,7 +14,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import sql
 
-from ...database.schemas.race_schema import Race, RaceResult
+from ...database.schemas.race_schema import Race, RaceResult, RacePayout
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +212,15 @@ class PostgreSQLStorage:
         try:
             logger.info(f"Race Is: {race}")
             
+            corner_positions_json = None
+            lap_data_json = None
+            
+            if race.corner_positions:
+                corner_positions_json = json.dumps(race.corner_positions, ensure_ascii=False)
+            
+            if race.lap_data:
+                lap_data_json = json.dumps(race.lap_data, ensure_ascii=False)
+            
             race_data = {
                 'race_id': race.race_id,
                 'race_date': race.race_date,
@@ -231,6 +240,8 @@ class PostgreSQLStorage:
                 'prize_1st': race.prize_1st,
                 'race_class': race.race_class,
                 'race_conditions': race.race_conditions,
+                'corner_positions': corner_positions_json,
+                'lap_data': lap_data_json,
                 'created_at': race.created_at or datetime.now(),
                 'updated_at': race.updated_at or datetime.now()
             }
@@ -242,12 +253,14 @@ class PostgreSQLStorage:
                             race_id, race_date, track_name, race_number, race_name,
                             distance, track_type, total_horses, grade, track_direction,
                             weather, track_condition, start_time, winning_time, pace,
-                            prize_1st, race_class, race_conditions, created_at, updated_at
+                            prize_1st, race_class, race_conditions, corner_positions, lap_data,
+                            created_at, updated_at
                         ) VALUES (
                             %(race_id)s, %(race_date)s, %(track_name)s, %(race_number)s, %(race_name)s,
                             %(distance)s, %(track_type)s, %(total_horses)s, %(grade)s, %(track_direction)s,
                             %(weather)s, %(track_condition)s, %(start_time)s, %(winning_time)s, %(pace)s,
-                            %(prize_1st)s, %(race_class)s, %(race_conditions)s, %(created_at)s, %(updated_at)s
+                            %(prize_1st)s, %(race_class)s, %(race_conditions)s, %(corner_positions)s::jsonb, %(lap_data)s::jsonb,
+                            %(created_at)s, %(updated_at)s
                         )
                         ON CONFLICT (race_id) DO UPDATE SET
                             race_date = EXCLUDED.race_date,
@@ -267,6 +280,8 @@ class PostgreSQLStorage:
                             prize_1st = EXCLUDED.prize_1st,
                             race_class = EXCLUDED.race_class,
                             race_conditions = EXCLUDED.race_conditions,
+                            corner_positions = EXCLUDED.corner_positions,
+                            lap_data = EXCLUDED.lap_data,
                             updated_at = EXCLUDED.updated_at
                     """, race_data)
                     conn.commit()
@@ -362,6 +377,51 @@ class PostgreSQLStorage:
                     
         except Exception as e:
             logger.error(f"Error inserting race results: {e}")
+            return False
+    
+    def insert_race_payouts(self, payouts: List[RacePayout]) -> bool:
+        """払い戻し情報を一括挿入"""
+        if not payouts:
+            return True
+            
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    # バッチインサート用のデータ準備
+                    insert_data = []
+                    for payout in payouts:
+                        data = {
+                            'race_id': payout.race_id,
+                            'bet_type': payout.bet_type,
+                            'combination': payout.combination,
+                            'payout_amount': payout.payout_amount,
+                            'popularity': payout.popularity,
+                            'created_at': payout.created_at or datetime.now(),
+                            'updated_at': payout.updated_at or datetime.now()
+                        }
+                        insert_data.append(data)
+                    
+                    # バッチインサート実行
+                    cursor.executemany("""
+                        INSERT INTO race_payouts (
+                            race_id, bet_type, combination, payout_amount, popularity,
+                            created_at, updated_at
+                        ) VALUES (
+                            %(race_id)s, %(bet_type)s, %(combination)s, %(payout_amount)s, %(popularity)s,
+                            %(created_at)s, %(updated_at)s
+                        )
+                        ON CONFLICT (race_id, bet_type, combination) DO UPDATE SET
+                            payout_amount = EXCLUDED.payout_amount,
+                            popularity = EXCLUDED.popularity,
+                            updated_at = EXCLUDED.updated_at
+                    """, insert_data)
+                    
+                    conn.commit()
+                    logger.debug(f"Race payouts inserted: {len(payouts)} records for race {payouts[0].race_id if payouts else 'unknown'}")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"Error inserting race payouts: {e}")
             return False
     
     def insert_complete_race_data(self, race: Race, results: List[RaceResult]) -> bool:

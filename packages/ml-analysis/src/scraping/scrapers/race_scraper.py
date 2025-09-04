@@ -17,7 +17,7 @@ from .base_scraper import BaseScraper
 from ..extractors.race.race_list_extractor import RaceListExtractor
 from ..extractors.race.race_detail_extractor import RaceDetailExtractor
 from ..storage.race_storage import RaceStorage
-from ...database.schemas.race_schema import Race, RaceResult, RaceDataValidator
+from ...database.schemas.race_schema import Race, RaceResult, RaceDataValidator, RacePayout
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,7 @@ class RaceScraper(BaseScraper):
             logger.error(f"Error fetching race list: {str(e)}")
             return all_races  # エラー時もそれまでに取得したデータを返す
     
-    def scrape_race_detail(self, race_id: str) -> Optional[Tuple[Race, List[RaceResult]]]:
+    def scrape_race_detail(self, race_id: str) -> Optional[Tuple[Race, List[RaceResult], List[RacePayout]]]:
         """
         レース詳細データを取得
         
@@ -213,7 +213,7 @@ class RaceScraper(BaseScraper):
             race_id: レースID
             
         Returns:
-            Tuple[Race, List[RaceResult]]: レース基本情報と結果のタプル
+            Tuple[Race, List[RaceResult], List[RacePayout]]: レース基本情報、結果、払い戻しのタプル
         """
         
         detail_url = f"{self.base_url}/race/{race_id}/"
@@ -228,14 +228,14 @@ class RaceScraper(BaseScraper):
 
             # logger.info(f"extract_race_detailに送る前のrace_scraperでの処理です！rsponse=: {response.text[:1000]}")  # 最初の1000文字だけ表示
             
-            # レース詳細を抽出
+            # レース詳細を抽出（払い戻し情報も含む）
             race_data = self.detail_extractor.extract_race_detail(response.text, race_id)
             
             if not race_data:
                 logger.warning(f"No race data extracted for {race_id}")
                 return None
                 
-            race, results = race_data
+            race, results, payouts = race_data
             
             # データバリデーション
             race_errors = self.validator.validate_race(race)
@@ -247,8 +247,20 @@ class RaceScraper(BaseScraper):
                 if result_errors:
                     logger.warning(f"Result validation errors for {result.horse_name}: {result_errors}")
             
-            logger.info(f"Successfully extracted race data: {race_id} ({len(results)} horses)")
-            return race, results
+            # 払い戻しデータのバリデーション
+            for payout in payouts:
+                payout_errors = self.validator.validate_race_payout(payout)
+                if payout_errors:
+                    logger.warning(f"Payout validation errors for {payout.bet_type} {payout.combination}: {payout_errors}")
+            
+            # 払い戻しデータの整合性チェック
+            if payouts:
+                consistency_errors = self.validator.validate_payout_consistency(payouts)
+                if consistency_errors:
+                    logger.warning(f"Payout consistency errors for {race_id}: {consistency_errors}")
+            
+            logger.info(f"Successfully extracted race data: {race_id} ({len(results)} horses, {len(payouts)} payouts)")
+            return race, results, payouts
             
         except Exception as e:
             logger.error(f"Error fetching race detail {race_id}: {str(e)}")
