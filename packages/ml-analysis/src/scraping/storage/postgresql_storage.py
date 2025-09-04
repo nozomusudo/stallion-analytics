@@ -17,6 +17,7 @@ from psycopg2 import sql
 from ...database.schemas.race_schema import Race, RaceResult, RacePayout
 from ...database.schemas.jockey_schema import Jockey
 from ...database.schemas.trainer_schema import Trainer
+from ...database.schemas.owner_schema import Owner
 
 logger = logging.getLogger(__name__)
 
@@ -606,7 +607,115 @@ class PostgreSQLStorage:
         except Exception as e:
             logger.error(f"Error inserting trainer {trainer.trainer_id}: {e}")
             return False
-    
+
+    def insert_owner(self, owner: Owner) -> bool:
+        """馬主情報を挿入"""
+        try:
+            logger.info(f"Owner Is: {owner}")
+            
+            yearly_stats_json = None
+            race_stats_json = None
+            track_stats_json = None
+            distance_stats_json = None
+            horse_list_json = None
+            
+            if owner.yearly_stats:
+                yearly_stats_json = json.dumps(owner.yearly_stats, ensure_ascii=False)
+            
+            if owner.race_stats:
+                race_stats_json = json.dumps(owner.race_stats, ensure_ascii=False)
+            
+            if owner.track_stats:
+                track_stats_json = json.dumps(owner.track_stats, ensure_ascii=False)
+                
+            if owner.distance_stats:
+                distance_stats_json = json.dumps(owner.distance_stats, ensure_ascii=False)
+                
+            if owner.horse_list:
+                horse_list_json = json.dumps(owner.horse_list, ensure_ascii=False)
+            
+            owner_data = {
+                'owner_id': owner.owner_id,
+                'name_ja': owner.name_ja,
+                'name_en': owner.name_en,
+                'birthdate': owner.birthdate,
+                'owner_type': owner.owner_type,
+                'license_date': owner.license_date,
+                'status': owner.status,
+                'total_races': owner.total_races,
+                'wins': owner.wins,
+                'seconds': owner.seconds,
+                'thirds': owner.thirds,
+                'win_rate': owner.win_rate,
+                'second_rate': owner.second_rate,
+                'show_rate': owner.show_rate,
+                'total_prize_money': owner.total_prize_money,
+                'total_horses': owner.total_horses,
+                'active_horses': owner.active_horses,
+                'retired_horses': owner.retired_horses,
+                'stakes_wins': owner.stakes_wins,
+                'grade1_wins': owner.grade1_wins,
+                'yearly_stats': yearly_stats_json,
+                'race_stats': race_stats_json,
+                'track_stats': track_stats_json,
+                'distance_stats': distance_stats_json,
+                'horse_list': horse_list_json,
+                'created_at': owner.created_at or datetime.now(),
+                'updated_at': owner.updated_at or datetime.now()
+            }
+            
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO owners (
+                            owner_id, name_ja, name_en, birthdate, owner_type, license_date,
+                            status, total_races, wins, seconds, thirds,
+                            win_rate, second_rate, show_rate, total_prize_money,
+                            total_horses, active_horses, retired_horses, stakes_wins, grade1_wins,
+                            yearly_stats, race_stats, track_stats, distance_stats, horse_list,
+                            created_at, updated_at
+                        ) VALUES (
+                            %(owner_id)s, %(name_ja)s, %(name_en)s, %(birthdate)s, %(owner_type)s, %(license_date)s,
+                            %(status)s, %(total_races)s, %(wins)s, %(seconds)s, %(thirds)s,
+                            %(win_rate)s, %(second_rate)s, %(show_rate)s, %(total_prize_money)s,
+                            %(total_horses)s, %(active_horses)s, %(retired_horses)s, %(stakes_wins)s, %(grade1_wins)s,
+                            %(yearly_stats)s::jsonb, %(race_stats)s::jsonb, %(track_stats)s::jsonb, %(distance_stats)s::jsonb, %(horse_list)s::jsonb,
+                            %(created_at)s, %(updated_at)s
+                        )
+                        ON CONFLICT (owner_id) DO UPDATE SET
+                            name_ja = EXCLUDED.name_ja,
+                            name_en = EXCLUDED.name_en,
+                            birthdate = EXCLUDED.birthdate,
+                            owner_type = EXCLUDED.owner_type,
+                            license_date = EXCLUDED.license_date,
+                            status = EXCLUDED.status,
+                            total_races = EXCLUDED.total_races,
+                            wins = EXCLUDED.wins,
+                            seconds = EXCLUDED.seconds,
+                            thirds = EXCLUDED.thirds,
+                            win_rate = EXCLUDED.win_rate,
+                            second_rate = EXCLUDED.second_rate,
+                            show_rate = EXCLUDED.show_rate,
+                            total_prize_money = EXCLUDED.total_prize_money,
+                            total_horses = EXCLUDED.total_horses,
+                            active_horses = EXCLUDED.active_horses,
+                            retired_horses = EXCLUDED.retired_horses,
+                            stakes_wins = EXCLUDED.stakes_wins,
+                            grade1_wins = EXCLUDED.grade1_wins,
+                            yearly_stats = EXCLUDED.yearly_stats,
+                            race_stats = EXCLUDED.race_stats,
+                            track_stats = EXCLUDED.track_stats,
+                            distance_stats = EXCLUDED.distance_stats,
+                            horse_list = EXCLUDED.horse_list,
+                            updated_at = EXCLUDED.updated_at
+                    """, owner_data)
+                    conn.commit()
+                    logger.debug(f"Owner inserted/updated: {owner.owner_id} ({owner.name_ja})")
+                    return True
+        except Exception as e:
+            logger.error(f"Error inserting owner {owner.owner_id}: {e}")
+            return False
+        
     def insert_complete_race_data(self, race: Race, results: List[RaceResult]) -> bool:
         """レース情報と結果を一括で挿入（トランザクション）"""
         try:
