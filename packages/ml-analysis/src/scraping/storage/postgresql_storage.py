@@ -18,6 +18,7 @@ from ...database.schemas.race_schema import Race, RaceResult, RacePayout
 from ...database.schemas.jockey_schema import Jockey
 from ...database.schemas.trainer_schema import Trainer
 from ...database.schemas.owner_schema import Owner
+from ...database.schemas.breeder_schema import Breeder
 
 logger = logging.getLogger(__name__)
 
@@ -714,6 +715,122 @@ class PostgreSQLStorage:
                     return True
         except Exception as e:
             logger.error(f"Error inserting owner {owner.owner_id}: {e}")
+            return False
+
+    def insert_breeder(self, breeder: Breeder) -> bool:
+        """生産者情報を挿入"""
+        try:
+            logger.info(f"Breeder Is: {breeder}")
+            
+            yearly_stats_json = None
+            race_stats_json = None
+            track_stats_json = None
+            distance_stats_json = None
+            produced_horses_json = None
+            stallion_stats_json = None
+            
+            if breeder.yearly_stats:
+                yearly_stats_json = json.dumps(breeder.yearly_stats, ensure_ascii=False)
+            
+            if breeder.race_stats:
+                race_stats_json = json.dumps(breeder.race_stats, ensure_ascii=False)
+            
+            if breeder.track_stats:
+                track_stats_json = json.dumps(breeder.track_stats, ensure_ascii=False)
+                
+            if breeder.distance_stats:
+                distance_stats_json = json.dumps(breeder.distance_stats, ensure_ascii=False)
+                
+            if breeder.produced_horses:
+                produced_horses_json = json.dumps(breeder.produced_horses, ensure_ascii=False)
+                
+            if breeder.stallion_stats:
+                stallion_stats_json = json.dumps(breeder.stallion_stats, ensure_ascii=False)
+            
+            breeder_data = {
+                'breeder_id': breeder.breeder_id,
+                'name_ja': breeder.name_ja,
+                'name_en': breeder.name_en,
+                'established_date': breeder.established_date,
+                'location': breeder.location,
+                'breeder_type': breeder.breeder_type,
+                'status': breeder.status,
+                'total_races': breeder.total_races,
+                'wins': breeder.wins,
+                'seconds': breeder.seconds,
+                'thirds': breeder.thirds,
+                'win_rate': breeder.win_rate,
+                'second_rate': breeder.second_rate,
+                'show_rate': breeder.show_rate,
+                'total_prize_money': breeder.total_prize_money,
+                'total_horses_produced': breeder.total_horses_produced,
+                'active_horses': breeder.active_horses,
+                'retired_horses': breeder.retired_horses,
+                'stakes_wins': breeder.stakes_wins,
+                'grade1_wins': breeder.grade1_wins,
+                'debut_horses': breeder.debut_horses,
+                'yearly_stats': yearly_stats_json,
+                'race_stats': race_stats_json,
+                'track_stats': track_stats_json,
+                'distance_stats': distance_stats_json,
+                'produced_horses': produced_horses_json,
+                'stallion_stats': stallion_stats_json,
+                'created_at': breeder.created_at or datetime.now(),
+                'updated_at': breeder.updated_at or datetime.now()
+            }
+            
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO breeders (
+                            breeder_id, name_ja, name_en, established_date, location, breeder_type,
+                            status, total_races, wins, seconds, thirds,
+                            win_rate, second_rate, show_rate, total_prize_money,
+                            total_horses_produced, active_horses, retired_horses, stakes_wins, grade1_wins, debut_horses,
+                            yearly_stats, race_stats, track_stats, distance_stats, produced_horses, stallion_stats,
+                            created_at, updated_at
+                        ) VALUES (
+                            %(breeder_id)s, %(name_ja)s, %(name_en)s, %(established_date)s, %(location)s, %(breeder_type)s,
+                            %(status)s, %(total_races)s, %(wins)s, %(seconds)s, %(thirds)s,
+                            %(win_rate)s, %(second_rate)s, %(show_rate)s, %(total_prize_money)s,
+                            %(total_horses_produced)s, %(active_horses)s, %(retired_horses)s, %(stakes_wins)s, %(grade1_wins)s, %(debut_horses)s,
+                            %(yearly_stats)s::jsonb, %(race_stats)s::jsonb, %(track_stats)s::jsonb, %(distance_stats)s::jsonb, %(produced_horses)s::jsonb, %(stallion_stats)s::jsonb,
+                            %(created_at)s, %(updated_at)s
+                        )
+                        ON CONFLICT (breeder_id) DO UPDATE SET
+                            name_ja = EXCLUDED.name_ja,
+                            name_en = EXCLUDED.name_en,
+                            established_date = EXCLUDED.established_date,
+                            location = EXCLUDED.location,
+                            breeder_type = EXCLUDED.breeder_type,
+                            status = EXCLUDED.status,
+                            total_races = EXCLUDED.total_races,
+                            wins = EXCLUDED.wins,
+                            seconds = EXCLUDED.seconds,
+                            thirds = EXCLUDED.thirds,
+                            win_rate = EXCLUDED.win_rate,
+                            second_rate = EXCLUDED.second_rate,
+                            show_rate = EXCLUDED.show_rate,
+                            total_prize_money = EXCLUDED.total_prize_money,
+                            total_horses_produced = EXCLUDED.total_horses_produced,
+                            active_horses = EXCLUDED.active_horses,
+                            retired_horses = EXCLUDED.retired_horses,
+                            stakes_wins = EXCLUDED.stakes_wins,
+                            grade1_wins = EXCLUDED.grade1_wins,
+                            debut_horses = EXCLUDED.debut_horses,
+                            yearly_stats = EXCLUDED.yearly_stats,
+                            race_stats = EXCLUDED.race_stats,
+                            track_stats = EXCLUDED.track_stats,
+                            distance_stats = EXCLUDED.distance_stats,
+                            produced_horses = EXCLUDED.produced_horses,
+                            stallion_stats = EXCLUDED.stallion_stats,
+                            updated_at = EXCLUDED.updated_at
+                    """, breeder_data)
+                    conn.commit()
+                    logger.debug(f"Breeder inserted/updated: {breeder.breeder_id} ({breeder.name_ja})")
+                    return True
+        except Exception as e:
+            logger.error(f"Error inserting breeder {breeder.breeder_id}: {e}")
             return False
         
     def insert_complete_race_data(self, race: Race, results: List[RaceResult]) -> bool:
