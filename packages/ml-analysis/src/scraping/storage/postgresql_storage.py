@@ -15,6 +15,8 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import sql
 
 from ...database.schemas.race_schema import Race, RaceResult, RacePayout
+from ...database.schemas.jockey_schema import Jockey
+from ...database.schemas.trainer_schema import Trainer
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +424,187 @@ class PostgreSQLStorage:
                     
         except Exception as e:
             logger.error(f"Error inserting race payouts: {e}")
+            return False
+    
+    def insert_jockey(self, jockey: Jockey) -> bool:
+        """騎手情報を挿入"""
+        try:
+            logger.info(f"Jockey Is: {jockey}")
+            
+            yearly_stats_json = None
+            track_stats_json = None
+            distance_stats_json = None
+            
+            if jockey.yearly_stats:
+                yearly_stats_json = json.dumps(jockey.yearly_stats, ensure_ascii=False)
+            
+            if jockey.track_stats:
+                track_stats_json = json.dumps(jockey.track_stats, ensure_ascii=False)
+                
+            if jockey.distance_stats:
+                distance_stats_json = json.dumps(jockey.distance_stats, ensure_ascii=False)
+            
+            jockey_data = {
+                'jockey_id': jockey.jockey_id,
+                'name_ja': jockey.name_ja,
+                'name_en': jockey.name_en,
+                'birthdate': jockey.birthdate,
+                'region': jockey.region,
+                'license_type': jockey.license_type,
+                'trainer_name': jockey.trainer_name,
+                'debut_date': jockey.debut_date,
+                'status': jockey.status,
+                'weight': jockey.weight,
+                'height': jockey.height,
+                'total_races': jockey.total_races,
+                'wins': jockey.wins,
+                'seconds': jockey.seconds,
+                'thirds': jockey.thirds,
+                'win_rate': jockey.win_rate,
+                'show_rate': jockey.show_rate,
+                'total_prize_money': jockey.total_prize_money,
+                'yearly_stats': yearly_stats_json,
+                'track_stats': track_stats_json,
+                'distance_stats': distance_stats_json,
+                'created_at': jockey.created_at or datetime.now(),
+                'updated_at': jockey.updated_at or datetime.now()
+            }
+            
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO jockeys (
+                            jockey_id, name_ja, name_en, birthdate, region, license_type, trainer_name,
+                            debut_date, status, weight, height, total_races, wins,
+                            seconds, thirds, win_rate, show_rate, total_prize_money,
+                            yearly_stats, track_stats, distance_stats, created_at, updated_at
+                        ) VALUES (
+                            %(jockey_id)s, %(name_ja)s, %(name_en)s, %(birthdate)s, %(region)s, %(license_type)s, %(trainer_name)s,
+                            %(debut_date)s, %(status)s, %(weight)s, %(height)s, %(total_races)s, %(wins)s,
+                            %(seconds)s, %(thirds)s, %(win_rate)s, %(show_rate)s, %(total_prize_money)s,
+                            %(yearly_stats)s::jsonb, %(track_stats)s::jsonb, %(distance_stats)s::jsonb,
+                            %(created_at)s, %(updated_at)s
+                        )
+                        ON CONFLICT (jockey_id) DO UPDATE SET
+                            name_ja = EXCLUDED.name_ja,
+                            name_en = EXCLUDED.name_en,
+                            birthdate = EXCLUDED.birthdate,
+                            region = EXCLUDED.region,
+                            license_type = EXCLUDED.license_type,
+                            trainer_name = EXCLUDED.trainer_name,
+                            debut_date = EXCLUDED.debut_date,
+                            status = EXCLUDED.status,
+                            weight = EXCLUDED.weight,
+                            height = EXCLUDED.height,
+                            total_races = EXCLUDED.total_races,
+                            wins = EXCLUDED.wins,
+                            seconds = EXCLUDED.seconds,
+                            thirds = EXCLUDED.thirds,
+                            win_rate = EXCLUDED.win_rate,
+                            show_rate = EXCLUDED.show_rate,
+                            total_prize_money = EXCLUDED.total_prize_money,
+                            yearly_stats = EXCLUDED.yearly_stats,
+                            track_stats = EXCLUDED.track_stats,
+                            distance_stats = EXCLUDED.distance_stats,
+                            updated_at = EXCLUDED.updated_at
+                    """, jockey_data)
+                    conn.commit()
+                    logger.debug(f"Jockey inserted/updated: {jockey.jockey_id} ({jockey.name_ja})")
+                    return True
+        except Exception as e:
+            logger.error(f"Error inserting jockey {jockey.jockey_id}: {e}")
+            return False
+
+    def insert_trainer(self, trainer: Trainer) -> bool:
+        """調教師情報を挿入"""
+        try:
+            logger.info(f"Trainer Is: {trainer}")
+            
+            yearly_stats_json = None
+            race_stats_json = None
+            track_stats_json = None
+            distance_stats_json = None
+            
+            if trainer.yearly_stats:
+                yearly_stats_json = json.dumps(trainer.yearly_stats, ensure_ascii=False)
+            
+            if trainer.race_stats:
+                race_stats_json = json.dumps(trainer.race_stats, ensure_ascii=False)
+            
+            if trainer.track_stats:
+                track_stats_json = json.dumps(trainer.track_stats, ensure_ascii=False)
+                
+            if trainer.distance_stats:
+                distance_stats_json = json.dumps(trainer.distance_stats, ensure_ascii=False)
+            
+            trainer_data = {
+                'trainer_id': trainer.trainer_id,
+                'name_ja': trainer.name_ja,
+                'name_en': trainer.name_en,
+                'birthdate': trainer.birthdate,
+                'region': trainer.region,
+                'license_type': trainer.license_type,
+                'debut_date': trainer.debut_date,
+                'status': trainer.status,
+                'total_races': trainer.total_races,
+                'wins': trainer.wins,
+                'seconds': trainer.seconds,
+                'thirds': trainer.thirds,
+                'win_rate': trainer.win_rate,
+                'second_rate': trainer.second_rate,
+                'show_rate': trainer.show_rate,
+                'total_prize_money': trainer.total_prize_money,
+                'yearly_stats': yearly_stats_json,
+                'race_stats': race_stats_json,
+                'track_stats': track_stats_json,
+                'distance_stats': distance_stats_json,
+                'created_at': trainer.created_at or datetime.now(),
+                'updated_at': trainer.updated_at or datetime.now()
+            }
+            
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO trainers (
+                            trainer_id, name_ja, name_en, birthdate, region, license_type,
+                            debut_date, status, total_races, wins, seconds, thirds,
+                            win_rate, second_rate, show_rate, total_prize_money,
+                            yearly_stats, race_stats, track_stats, distance_stats,
+                            created_at, updated_at
+                        ) VALUES (
+                            %(trainer_id)s, %(name_ja)s, %(name_en)s, %(birthdate)s, %(region)s, %(license_type)s,
+                            %(debut_date)s, %(status)s, %(total_races)s, %(wins)s, %(seconds)s, %(thirds)s,
+                            %(win_rate)s, %(second_rate)s, %(show_rate)s, %(total_prize_money)s,
+                            %(yearly_stats)s::jsonb, %(race_stats)s::jsonb, %(track_stats)s::jsonb, %(distance_stats)s::jsonb,
+                            %(created_at)s, %(updated_at)s
+                        )
+                        ON CONFLICT (trainer_id) DO UPDATE SET
+                            name_ja = EXCLUDED.name_ja,
+                            name_en = EXCLUDED.name_en,
+                            birthdate = EXCLUDED.birthdate,
+                            region = EXCLUDED.region,
+                            license_type = EXCLUDED.license_type,
+                            debut_date = EXCLUDED.debut_date,
+                            status = EXCLUDED.status,
+                            total_races = EXCLUDED.total_races,
+                            wins = EXCLUDED.wins,
+                            seconds = EXCLUDED.seconds,
+                            thirds = EXCLUDED.thirds,
+                            win_rate = EXCLUDED.win_rate,
+                            second_rate = EXCLUDED.second_rate,
+                            show_rate = EXCLUDED.show_rate,
+                            total_prize_money = EXCLUDED.total_prize_money,
+                            yearly_stats = EXCLUDED.yearly_stats,
+                            race_stats = EXCLUDED.race_stats,
+                            track_stats = EXCLUDED.track_stats,
+                            distance_stats = EXCLUDED.distance_stats,
+                            updated_at = EXCLUDED.updated_at
+                    """, trainer_data)
+                    conn.commit()
+                    logger.debug(f"Trainer inserted/updated: {trainer.trainer_id} ({trainer.name_ja})")
+                    return True
+        except Exception as e:
+            logger.error(f"Error inserting trainer {trainer.trainer_id}: {e}")
             return False
     
     def insert_complete_race_data(self, race: Race, results: List[RaceResult]) -> bool:
